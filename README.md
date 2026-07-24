@@ -1,98 +1,187 @@
 # Wuthering Veil
 
-Linux system monitoring and security operations platform.
+**Security Operation Center for Linux fleets**
 
-**Stack:** C++17 agent · Rust server · Tauri desktop app (React + native window)
+`v1.0.1` · C++17 agent · Rust/Axum · React · Tauri desktop
 
-**Production deployment:** see [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
+## Documentation
 
-**Install on a new machine:** see [`INSTALL.md`](INSTALL.md) — public [GitHub Releases](https://github.com/badrust0/wutheringveil/releases) ship agent + desktop (v1.0.1+). End-user docs: [`release/public/`](release/public/).
-
-**Cut a release (maintainers):** see [`release/README.md`](release/README.md)
-
----
-
-## Quick start — desktop app (dev mode)
-
-Requires: `build-essential cmake` (C++ agent), `@tauri-apps/cli` (Tauri).
-
-```bash
-sudo apt-get install -y build-essential cmake libwebkit2gtk-4.1-dev \
-  libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-# Terminal 1 — desktop app (starts embedded server + opens native window)
-cd desktop
-npm install
-npm run tauri dev
-
-# Terminal 2 — C++ agent (monitors this machine, pushes to embedded server)
-cd agent && ./build.sh
-./build/wv-agent --server http://127.0.0.1:18080 --key dev-agent-key
-```
-
-Login: `admin` / `wv` — change in **Settings** (desktop release) or via `WV_ADMIN_PASSWORD` env (dev)
-
-The app opens a native window. The embedded Rust server runs inside it on port `18080`.
-Data is stored in `~/.local/share/wuthering-veil/wv.db`.
-Credentials (including agent key) are in `~/.local/share/wuthering-veil/secrets.env`.
+| Guide | Description |
+|-------|-------------|
+| **[INSTALL.md](INSTALL.md)** | **Start here** — desktop app, Linux agent, credentials, troubleshooting |
+| [DESKTOP.md](DESKTOP.md) | AppImage / `.deb`, Settings, local agent |
+| [CHANGELOG.md](CHANGELOG.md) | Release history (1.0.0 → 1.0.1) |
+| [RELEASE_NOTES.md](RELEASE_NOTES.md) | v1.0.1 summary for this release |
+| [Releases](https://github.com/badrust0/wutheringveil/releases) | Download binaries + `checksums.sha256` |
 
 ---
 
-## Production build
+## What it is
 
-```bash
-cd desktop
-npm run tauri build
-# → desktop/src-tauri/target/release/bundle/
-```
+Wuthering Veil is a **fleet monitoring and SOC-style control plane** for Linux.
 
-Produces a `.deb`, `.AppImage`, or platform-native installer.
+| Layer | Role |
+|-------|------|
+| **`wv-agent`** | C++17 daemon on each host — procfs metrics, auth.log + port/process/FIM security signals, HTTPS ingest |
+| **`wv-server`** | Rust/Axum API — SQLite host registry, alert engine, SIEM event store, SSE fan-out |
+| **Dashboard** | React SPA — Command Center, host detail, alerts, SIEM investigation, website checks |
+| **Desktop** | Tauri app — embedded server on `127.0.0.1:18080`, native window, **Settings** for credentials |
+
+Agents push on a configurable interval. The dashboard streams live updates over **SSE**. Operators sign in with a bearer token; agents authenticate with **`X-WV-Key`**.
+
+This repository holds **install documentation** and links to **release binaries**. Application source is not published here.
 
 ---
 
-## Standalone web server (optional, for Docker/server deployments)
+## Downloads (v1.0.1)
 
-The Rust server can also run headlessly — agents push to it, any browser connects.
+**[github.com/badrust0/wutheringveil/releases](https://github.com/badrust0/wutheringveil/releases)**
+
+| Artifact | Platform | Status |
+|----------|----------|--------|
+| `wv-agent-1.0.1-linux-amd64.tar.gz` | Linux x86_64 | **Available** |
+| `wuthering-veil-desktop-1.0.1-linux-amd64.AppImage` | Linux x86_64 | **Available** |
+| `wuthering-veil-desktop-1.0.1-linux-amd64.deb` | Debian/Ubuntu | **Available** |
+| `checksums.sha256` | — | Verify all files |
+| `manifest.json` | — | On Releases (artifact list + SHA256) |
+| Server Docker images | — | Coming in a future release |
+
+Use the **named files** above — not GitHub’s auto-generated **“Source code (zip)”**.
 
 ```bash
-# Terminal 1
-cd server && cargo run
-
-# Terminal 2
-cd web && npm install && npm run dev
-# Open http://localhost:5173
-
-# Terminal 3
-cd agent && ./build.sh && ./build/wv-agent
+sha256sum -c checksums.sha256
 ```
 
-Docker Compose (server + nginx SPA):
+---
+
+## Quick start — Desktop
+
 ```bash
-make release-v1                  # v1.0 production deploy (HTTP)
-make release-v1-tls              # v1.0 with automatic TLS
-# or manually:
-cd deploy && ./release-v1.sh
+chmod +x wuthering-veil-desktop-1.0.1-linux-amd64.AppImage
+./wuthering-veil-desktop-1.0.1-linux-amd64.AppImage
+
+# or .deb
+sudo dpkg -i wuthering-veil-desktop-1.0.1-linux-amd64.deb
 ```
 
-See [`deploy/DEPLOY.md`](deploy/DEPLOY.md) for HTTPS, agents, and firewall details.
+1. Sign in: `admin` / `wv` (first launch — **change in Settings immediately**)  
+2. **Settings** → password + agent API key  
+3. Install agents — [INSTALL.md](INSTALL.md) · [DESKTOP.md](DESKTOP.md)
+
+Credentials: `~/.local/share/wuthering-veil/secrets.env` (restart after edits)
+
+---
+
+## Quick start — Agent
+
+On every Linux host you want to monitor:
+
+```bash
+tar xzf wv-agent-1.0.1-linux-amd64.tar.gz
+cd wv-agent-1.0.1-linux-amd64
+
+WV_SERVER_URL=https://your-server.example.com \
+WV_API_KEY=<matches server WV_AGENT_KEY or desktop Settings> \
+  sudo ./install.sh
+```
+
+**Verify**
+
+```bash
+systemctl status wv-agent
+journalctl -u wv-agent -f
+```
+
+Host should appear in the dashboard within ~30s (default poll: 5s).
+
+| Variable | Meaning |
+|----------|---------|
+| `WV_SERVER_URL` | Server base URL, no trailing slash |
+| `WV_API_KEY` | Shared agent key on the control plane |
+| `WV_INTERVAL` | Optional poll interval (seconds) |
+| `WV_PLUGIN_DIR` | Optional `.so` plugin directory (default `/etc/wv/plugins`) |
+
+---
+
+## Install — Desktop (details)
+
+Embedded server + native UI. Data: `~/.local/share/wuthering-veil/wv.db`
+
+See **[DESKTOP.md](DESKTOP.md)** for AppImage, `.deb`, Settings, and local agent setup.
+
+**Local agent** (same machine as desktop):
+
+```bash
+WV_SERVER_URL=http://127.0.0.1:18080 \
+WV_API_KEY=<from Settings> \
+  sudo ./install.sh
+```
 
 ---
 
 ## Architecture
 
 ```
-agent/      C++17 — procfs, netlink, inotify FIM (Phase 2)
-server/     Rust  — axum API, ingest, SSE stream, alert engine (also a library)
-desktop/    Tauri — native window wrapping React UI + embedded server
-web/        React — standalone web mode (same UI, used by Docker deploy)
-deploy/     Docker Compose, nginx config
+  Linux hosts                         Operator
+  ┌─────────────┐                    ┌──────────────────┐
+  │  wv-agent   │──HTTPS POST ingest─│  wv-server       │
+  │  (C++17)    │                    │  (Rust / Axum)   │
+  └─────────────┘                    │        │         │
+        │                            │   React UI       │
+        │  metrics + security_events │   (web / Tauri)  │
+        └────────────────────────────│   SSE / REST     │
+                                     └──────────────────┘
 ```
 
-## Phase roadmap
+**Desktop mode:** server + UI in one Tauri process — embedded API `http://127.0.0.1:18080`.  
+**Server mode:** multi-host fleet (Docker deploy — not yet a public binary download).
 
-| Phase | Status   | Features                                              |
-|-------|----------|-------------------------------------------------------|
-| 1     | **Done** | Metrics agent, fleet dashboard, alerts, auth          |
-| 2     | Planned  | Log ingest, FIM, fail2ban, SSH brute-force rules      |
-| 3     | Planned  | auditd, MITRE ATT&CK mapping, active response         |
-| 4     | Planned  | eBPF probes via libbpf                                |
+**Health check:** `GET /api/v1/health`
+
+---
+
+## Security signals (agent)
+
+Twelve event types emitted today, including:
+
+| Type | Description |
+|------|-------------|
+| `failed_login` | Failed SSH/auth attempts |
+| `privilege_escalation` | sudo / setuid activity |
+| `new_listening_port` | New open port |
+| `outbound_volatility` | Unusual outbound traffic |
+| `data_exfiltration` | Large outbound transfer heuristics |
+| `dns_failures` | DNS resolution failures |
+| `suspicious_process` | Unexpected process behaviour |
+| `process_lineage` | Suspicious parent/child chain |
+| `cryptomining` | Mining-related heuristics |
+| `file_integrity` | FIM — watched file changed |
+| `persistence_change` | Cron/unit/autostart change |
+| `unsigned_module` | Unsigned kernel module loaded |
+| `security_policy_disabled` | SELinux/AppArmor disabled |
+
+Severity: `info` · `warning` · `critical`
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `ingest failed (HTTP 401)` | `WV_API_KEY` mismatch — check desktop **Settings** or server config |
+| `ingest failed (HTTP 0)` | Server down, TLS failure, or firewall |
+| Host stuck offline | Agent not running or wrong `WV_SERVER_URL` |
+| Dashboard empty after login | No agents connected yet — install agent tarball |
+| Desktop white screen | WebKit/GPU — `WEBKIT_DISABLE_DMABUF_RENDERER=1` |
+| Login fails after password change | Restart desktop app after **Settings** save |
+| Forgot desktop password | Edit `secrets.env`; restart app |
+
+More detail: [INSTALL.md](INSTALL.md)
+
+---
+
+## Version
+
+[VERSION](VERSION) · [CHANGELOG.md](CHANGELOG.md) · [RELEASE_NOTES.md](RELEASE_NOTES.md) (v1.0.1 summary)
+
+**Stack:** C++17 · Rust 2021 · Axum 0.8 · React 19 · Tauri 2 · SQLite
