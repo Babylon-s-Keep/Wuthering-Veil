@@ -7,7 +7,7 @@ git clone https://github.com/badrust0/wutheringveil.git
 cd wutheringveil
 ```
 
-The repository contains **source code** (private dev) and **release packaging scripts**. Public users download pre-built artifacts from [GitHub Releases](https://github.com/babylon-s-keep/wutheringveil/releases) — see [`release/public/INSTALL.md`](release/public/INSTALL.md) for the end-user install guide copied to the public repo.
+The repository contains **source code** (private dev) and **release packaging scripts**. Public users download pre-built artifacts from [GitHub Releases](https://github.com/badrust0/wutheringveil/releases) — see [`release/public/INSTALL.md`](release/public/INSTALL.md) for the end-user install guide copied to the public repo.
 
 For production TLS, firewall rules, and ops detail, see [`deploy/DEPLOY.md`](deploy/DEPLOY.md).
 
